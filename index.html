@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evaluador de Proyectos - Ingeniería Económica</title>
+    
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body { background-color: #f0f2f5; }
+        .winner-row { background-color: #d1e7dd !important; border-left: 5px solid #198754; }
+        .chart-box { 
+            background: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+            margin-bottom: 20px;
+        }
+
+        /* --- ESTILOS DE LA PANTALLA DE CARGA --- */
+        #loader-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff; /* Fondo blanco */
+            z-index: 9999; /* Asegura que esté encima de todo */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease, visibility 0.5s;
+        }
+        
+        #loader-logo {
+            max-width: 200px; /* Tamaño máximo del logo */
+            margin-bottom: 20px;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Animación suave para el logo */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .hidden-loader {
+            opacity: 0;
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loader-wrapper">
+    <img src="logo.png" alt="Cargando..." id="loader-logo">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Cargando...</span>
+    </div>
+</div>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand" href="#"><i class="fas fa-file-invoice-dollar me-2"></i>Evaluador de Proyectos</a>
+        <div class="d-flex align-items-center">
+            <div class="input-group input-group-sm me-3">
+                <span class="input-group-text bg-secondary text-white">TMAR Global (%)</span>
+                <input type="number" id="globalTmar" class="form-control" value="12" style="width: 70px;">
+                <button class="btn btn-outline-light" onclick="recalcularTodo()">Actualizar</button>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="borrarTodo()"><i class="fas fa-trash"></i> Reset</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4">
+    <div class="row">
+        <div class="col-lg-3 mb-4">
+            <div class="card shadow-sm sticky-top" style="top: 20px;">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-plus-circle me-2"></i>Nuevo Proyecto
+                </div>
+                <div class="card-body">
+                    <form id="addProjectForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nombre del Proyecto</label>
+                            <input type="text" class="form-control" id="pNombre" placeholder="Ej. Proyecto A" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Inversión Inicial ($P)</label>
+                            <input type="number" class="form-control" id="pInversion" placeholder="10000" required>
+                        </div>
+                        
+                        <hr>
+                        <h6 class="text-muted mb-3">Parámetros de Flujo</h6>
+
+                        <div class="mb-2">
+                            <label class="form-label small">Vida Útil (Años - N)</label>
+                            <input type="number" class="form-control" id="pN" placeholder="5" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Flujo Neto Anual ($A)</label>
+                            <input type="number" class="form-control" id="pAnualidad" placeholder="3200" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Valor de Salvamento ($VS)</label>
+                            <input type="number" class="form-control" id="pSalvamento" placeholder="1000" value="0">
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success"><i class="fas fa-save me-2"></i>Agregar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-9" id="reportArea">
+            
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><i class="fas fa-chart-pie me-2"></i>Panel de Resultados</h4>
+                <button class="btn btn-primary" onclick="generarPDF()" id="btnPdf">
+                    <i class="fas fa-file-pdf me-2"></i>Descargar Reporte PDF
+                </button>
+            </div>
+
+            <div class="card shadow-sm mb-4" id="cardTable">
+                <div class="card-header bg-white fw-bold">Tabla Comparativa</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle text-center mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Proyecto</th>
+                                <th>Inv. Inicial</th>
+                                <th>Vida (N)</th>
+                                <th>VPN</th>
+                                <th>TIR</th>
+                                <th>B/C</th>
+                                <th class="no-print">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="projectsTableBody">
+                            </tbody>
+                    </table>
+                </div>
+                <div class="card-footer bg-light" id="winnerAlert" style="display:none;">
+                    <i class="fas fa-trophy text-warning me-2"></i>
+                    <strong>Mejor Opción:</strong> <span id="winnerName">--</span> (VPN más alto).
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="chart-box" id="boxChartVPN">
+                        <h6 class="text-muted mb-3 text-center">Comparación de VPN ($)</h6>
+                        <div style="position: relative; height: 300px;">
+                            <canvas id="chartVPN"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="chart-box" id="boxChartSens">
+                        <h6 class="text-muted mb-3 text-center">Sensibilidad (VPN vs Tasa)</h6>
+                        <div style="position: relative; height: 300px;">
+                            <canvas id="chartSensitivity"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 mb-4">
+                    <div class="chart-box" id="boxChartFlows">
+                        <h6 class="text-muted mb-3 text-center">Perfil de Flujos de Caja</h6>
+                        <div style="position: relative; height: 300px;">
+                            <canvas id="chartFlows"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // --- VARIABLES GLOBALES ---
+    let projects = [];
+    let chartVPNInstance = null;
+    let chartFlowsInstance = null;
+    let chartSensitivityInstance = null;
+
+    // --- LÓGICA DE INICIO Y PANTALLA DE CARGA ---
+    window.addEventListener('load', () => {
+        // Inicializar datos
+        cargarDeLocalStorage();
+        actualizarUI();
+
+        // Temporizador de 2 segundos para quitar la pantalla de carga
+        setTimeout(() => {
+            const loader = document.getElementById('loader-wrapper');
+            loader.classList.add('hidden-loader');
+            // Eliminar del DOM después de la transición CSS (0.5s)
+            setTimeout(() => {
+                loader.style.display = 'none';
+            }, 500);
+        }, 2000); // 2000ms = 2 segundos
+    });
+
+    document.getElementById('addProjectForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        agregarProyecto();
+    });
+
+    // --- LÓGICA DE NEGOCIO ---
+
+    function agregarProyecto() {
+        const nombre = document.getElementById('pNombre').value;
+        const inversion = parseFloat(document.getElementById('pInversion').value);
+        const n = parseInt(document.getElementById('pN').value);
+        const anualidad = parseFloat(document.getElementById('pAnualidad').value);
+        const salvamento = parseFloat(document.getElementById('pSalvamento').value || 0);
+
+        let flujos = [];
+        for(let i=0; i<n; i++) {
+            let monto = anualidad;
+            if (i === n-1) monto += salvamento;
+            flujos.push(monto);
+        }
+
+        const nuevoProyecto = {
+            id: Date.now(),
+            nombre,
+            inversion,
+            flujos, 
+            vidaUtil: n
+        };
+
+        projects.push(nuevoProyecto);
+        guardarEnLocalStorage();
+        actualizarUI();
+        
+        document.getElementById('pNombre').value = "";
+        document.getElementById('pInversion').value = "";
+        document.getElementById('pNombre').focus();
+    }
+
+    function recalcularTodo() { actualizarUI(); }
+
+    function borrarTodo() {
+        if(confirm("¿Borrar todos los datos?")) {
+            projects = [];
+            localStorage.removeItem('ecoProjectsPDF');
+            actualizarUI();
+        }
+    }
+
+    function eliminarProyecto(id) {
+        projects = projects.filter(p => p.id !== id);
+        guardarEnLocalStorage();
+        actualizarUI();
+    }
+
+    // --- CÁLCULOS ---
+    function calcularMetricas(proyecto, tmar) {
+        const i = tmar / 100;
+        let vpn = -proyecto.inversion;
+        let vpIngresos = 0;
+
+        proyecto.flujos.forEach((f, idx) => {
+            let factor = Math.pow(1 + i, idx + 1);
+            vpn += f / factor;
+            if(f > 0) vpIngresos += f / factor;
+        });
+
+        let bc = vpIngresos / proyecto.inversion;
+        let tir = calcularTIR(proyecto.inversion, proyecto.flujos);
+
+        return { vpn, tir, bc };
+    }
+
+    function calcularTIR(inv, flujos) {
+        let x0 = 0.1; 
+        for (let k = 0; k < 1000; k++) {
+            let f = -inv;
+            let df = 0;
+            for (let t = 0; t < flujos.length; t++) {
+                f += flujos[t] / Math.pow(1 + x0, t + 1);
+                df -= (t + 1) * flujos[t] / Math.pow(1 + x0, t + 2);
+            }
+            let x1 = x0 - f / df;
+            if (Math.abs(x1 - x0) < 0.00001) return (x1 * 100).toFixed(2);
+            x0 = x1;
+        }
+        return "N/A";
+    }
+
+    // --- UI Y GRÁFICOS ---
+    function actualizarUI() {
+        const tmar = parseFloat(document.getElementById('globalTmar').value);
+        const tbody = document.getElementById('projectsTableBody');
+        tbody.innerHTML = '';
+        
+        let maxVPN = -Infinity;
+        let winnerID = null;
+
+        const resultados = projects.map(p => {
+            const m = calcularMetricas(p, tmar);
+            if (m.vpn > maxVPN) {
+                maxVPN = m.vpn;
+                winnerID = p.id;
+            }
+            return { ...p, ...m };
+        });
+
+        resultados.forEach(p => {
+            const isWinner = p.id === winnerID && p.vpn > 0;
+            const tr = document.createElement('tr');
+            if(isWinner) tr.classList.add('winner-row');
+
+            tr.innerHTML = `
+                <td>${p.nombre} ${isWinner ? '<i class="fas fa-crown text-warning"></i>' : ''}</td>
+                <td>$${p.inversion.toLocaleString()}</td>
+                <td>${p.vidaUtil}</td>
+                <td class="${p.vpn >= 0 ? 'text-success' : 'text-danger'} fw-bold">$${p.vpn.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td>${p.tir}%</td>
+                <td>${p.bc.toFixed(2)}</td>
+                <td class="no-print">
+                    <button class="btn btn-outline-danger btn-sm" onclick="eliminarProyecto(${p.id})"><i class="fas fa-times"></i></button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        if (winnerID && maxVPN > 0) {
+            document.getElementById('winnerAlert').style.display = 'block';
+            document.getElementById('winnerName').innerText = resultados.find(r => r.id === winnerID).nombre;
+        } else {
+            document.getElementById('winnerAlert').style.display = 'none';
+        }
+
+        actualizarGraficos(resultados);
+    }
+
+    function actualizarGraficos(datos) {
+        const colors = ['#0d6efd', '#dc3545', '#198754', '#ffc107', '#6610f2'];
+
+        if(chartVPNInstance) chartVPNInstance.destroy();
+        chartVPNInstance = new Chart(document.getElementById('chartVPN'), {
+            type: 'bar',
+            data: {
+                labels: datos.map(d => d.nombre),
+                datasets: [{
+                    label: 'VPN ($)',
+                    data: datos.map(d => d.vpn),
+                    backgroundColor: datos.map((d,i) => colors[i%colors.length])
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        if(chartSensitivityInstance) chartSensitivityInstance.destroy();
+        const sensDatasets = datos.map((d, idx) => {
+            let pts = [];
+            for(let r=0; r<=50; r+=5) {
+                let v = -d.inversion;
+                d.flujos.forEach((f, t) => v += f / Math.pow(1 + r/100, t + 1));
+                pts.push(v);
+            }
+            return {
+                label: d.nombre,
+                data: pts,
+                borderColor: colors[idx%colors.length],
+                fill: false,
+                tension: 0.4
+            };
+        });
+
+        chartSensitivityInstance = new Chart(document.getElementById('chartSensitivity'), {
+            type: 'line',
+            data: { labels: ['0%','5%','10%','15%','20%','25%','30%','35%','40%','45%','50%'], datasets: sensDatasets },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        if(chartFlowsInstance) chartFlowsInstance.destroy();
+        const maxN = Math.max(...datos.map(d => d.vidaUtil), 0);
+        let labelsT = [];
+        for(let i=0; i<=maxN; i++) labelsT.push('Año ' + i);
+        
+        const flowDatasets = datos.map((d, i) => ({
+            label: d.nombre,
+            data: [-d.inversion, ...d.flujos],
+            borderColor: colors[i % colors.length],
+            backgroundColor: colors[i % colors.length],
+            tension: 0.1
+        }));
+
+        chartFlowsInstance = new Chart(document.getElementById('chartFlows'), {
+            type: 'line',
+            data: { labels: labelsT, datasets: flowDatasets },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    // --- EXPORTACIÓN PDF ---
+    async function generarPDF() {
+        const { jsPDF } = window.jspdf;
+        const btn = document.getElementById('btnPdf');
+        
+        if(projects.length === 0) {
+            alert("No hay proyectos para exportar");
+            return;
+        }
+
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generando...';
+        btn.disabled = true;
+
+        try {
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth(); 
+            const margin = 10;
+            let currentY = 20;
+
+            doc.setFontSize(18);
+            doc.text("Reporte de Evaluación de Proyectos", margin, currentY);
+            currentY += 10;
+            doc.setFontSize(10);
+            doc.text(`Fecha: ${new Date().toLocaleDateString()} - TMAR Global: ${document.getElementById('globalTmar').value}%`, margin, currentY);
+            currentY += 10;
+
+            const actions = document.querySelectorAll('.no-print');
+            actions.forEach(el => el.style.display = 'none');
+            
+            const tableCanvas = await html2canvas(document.getElementById('cardTable'), { scale: 2 });
+            const tableImg = tableCanvas.toDataURL('image/png');
+            const tableHeight = (tableCanvas.height * (pageWidth - 2*margin)) / tableCanvas.width;
+            
+            doc.addImage(tableImg, 'PNG', margin, currentY, pageWidth - 2*margin, tableHeight);
+            currentY += tableHeight + 10;
+            
+            actions.forEach(el => el.style.display = '');
+
+            const charts = [
+                { id: 'boxChartVPN', title: 'Comparativa VPN' },
+                { id: 'boxChartSens', title: 'Análisis de Sensibilidad' },
+                { id: 'boxChartFlows', title: 'Flujos de Caja' }
+            ];
+
+            for (const chart of charts) {
+                const canvas = await html2canvas(document.getElementById(chart.id), { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const imgHeight = (canvas.height * (pageWidth - 2*margin)) / canvas.width;
+
+                if (currentY + imgHeight > 280) {
+                    doc.addPage();
+                    currentY = 20;
+                }
+
+                doc.setFontSize(12);
+                doc.text(chart.title, margin, currentY - 2);
+                doc.addImage(imgData, 'PNG', margin, currentY, pageWidth - 2*margin, imgHeight);
+                currentY += imgHeight + 15;
+            }
+
+            doc.save('Reporte_Ingenieria_Economica.pdf');
+
+        } catch (error) {
+            console.error(error);
+            alert("Error al generar el PDF.");
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    function guardarEnLocalStorage() { localStorage.setItem('ecoProjectsPDF', JSON.stringify(projects)); }
+    function cargarDeLocalStorage() {
+        const data = localStorage.getItem('ecoProjectsPDF');
+        if(data) projects = JSON.parse(data);
+    }
+</script>
+</body>
+</html>
