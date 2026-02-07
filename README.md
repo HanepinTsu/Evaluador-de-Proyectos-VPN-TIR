@@ -15,10 +15,6 @@ Una aplicación web completa y responsiva para la toma de decisiones financieras
 - [Características Principales](#-características-principales)
 - [Tecnologías Utilizadas](#-tecnologías-utilizadas)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
-- [Instalación y Uso](#-instalación-y-uso)
-- [Manual de Usuario](#-manual-de-usuario)
-- [Validación y Casos de Prueba](#-validación-y-casos-de-prueba)
-- [Algoritmos Implementados](#-algoritmos-implementados)
 
 ---
 
