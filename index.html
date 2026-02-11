@@ -51,7 +51,7 @@
                             </div>
                             
                             <hr>
-                            <h6 class="text-muted mb-2">Parámetros de Flujo</h6>
+                            <h6 class="text-muted mb-2">Configuración de Flujos</h6>
 
                             <ul class="nav nav-tabs nav-fill small mb-3" id="flowTab" role="tablist">
                                 <li class="nav-item" role="presentation">
@@ -79,16 +79,21 @@
                                 </div>
 
                                 <div class="tab-pane fade" id="tab-variable" role="tabpanel">
+                                    <div class="mb-2">
+                                        <label class="form-label small">Flujos Operativos (Año 1...N)</label>
+                                        <textarea class="form-control" id="pFlujosManual" rows="4" placeholder="Ej: 2000, 3500, 4000"></textarea>
+                                        <div class="form-text text-muted" style="font-size: 0.75rem;">Ingrese solo los ingresos operativos separados por coma.</div>
+                                    </div>
                                     <div class="mb-3">
-                                        <label class="form-label small">Flujos Netos (Año 1 en adelante)</label>
-                                        <textarea class="form-control" id="pFlujosManual" rows="4" placeholder="Ej: 2000, 3500, 4000, 5500"></textarea>
-                                        <div class="form-text" style="font-size: 0.75rem;">Separa los valores con comas. Incluye el salvamento en el último valor si aplica.</div>
+                                        <label class="form-label small fw-bold text-success">Valor de Salvamento ($VS)</label>
+                                        <input type="number" class="form-control border-success" id="pSalvamentoVar" placeholder="0" value="0">
+                                        <div class="form-text" style="font-size: 0.75rem;">Se sumará automáticamente al último año.</div>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="d-grid mt-3">
-                                <button type="submit" class="btn btn-success"><i class="fas fa-save me-2"></i>Agregar</button>
+                                <button type="submit" class="btn btn-success"><i class="fas fa-save me-2"></i>Calcular y Agregar</button>
                             </div>
                         </form>
                     </div>
@@ -98,14 +103,14 @@
             <div class="col-lg-9" id="reportArea">
                 
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4><i class="fas fa-chart-pie me-2"></i>Panel de Resultados</h4>
+                    <h4><i class="fas fa-chart-pie me-2"></i>Tablero de Resultados</h4>
                     <button class="btn btn-primary" id="btnPdf">
                         <i class="fas fa-file-pdf me-2"></i>Descargar Reporte PDF
                     </button>
                 </div>
 
                 <div class="card shadow-sm mb-4" id="cardTable">
-                    <div class="card-header bg-white fw-bold">Tabla Comparativa</div>
+                    <div class="card-header bg-white fw-bold">Matriz de Decisión</div>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle text-center mb-0">
                             <thead class="table-light">
@@ -124,7 +129,7 @@
                     </div>
                     <div class="card-footer bg-light" id="winnerAlert" style="display:none;">
                         <i class="fas fa-trophy text-warning me-2"></i>
-                        <strong>Mejor Opción:</strong> <span id="winnerName">--</span> (VPN más alto).
+                        <strong>Mejor Opción:</strong> <span id="winnerName">--</span> (Criterio: Máximo VPN).
                     </div>
                 </div>
 
@@ -163,6 +168,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
     <script src="script.js"></script>
 </body>
 </html>
