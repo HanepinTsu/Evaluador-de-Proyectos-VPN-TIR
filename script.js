@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Lógica principal para el Evaluador de Proyectos de Ingeniería Económica.
+ * Maneja la entrada de datos, cálculos financieros (VPN, VAE, TIR, B/C), visualización de gráficos
+ * y exportación de reportes.
+ * @author HanepinTsu/PSM
+ * @version 1.0.0
+ */
+
 // ==========================================
 // VARIABLES DE ESTADO GLOBAL
 // ==========================================
@@ -112,7 +120,6 @@ function agregarProyecto() {
         }
 
         // AUTOMATIZACIÓN: Sumar el Salvamento al último flujo ingresado
-        // F_n = FlujoOperativo_n + ValorSalvamento
         if (salvamentoVar !== 0) {
             flujos[flujos.length - 1] += salvamentoVar;
         }
@@ -175,7 +182,7 @@ window.eliminarProyecto = function(id) {
  * Calcula los indicadores financieros clave para un proyecto.
  * @param {Object} proyecto - Objeto del proyecto.
  * @param {number} tmar - Tasa Mínima Atractiva de Rendimiento (%).
- * @returns {Object} Objeto con vpn, tir y bc calculados.
+ * @returns {Object} Objeto con vpn, vae, tir y bc calculados.
  */
 function calcularMetricas(proyecto, tmar) {
     const i = tmar / 100;
@@ -195,15 +202,25 @@ function calcularMetricas(proyecto, tmar) {
     // Tasa Interna de Retorno
     let tir = calcularTIR(proyecto.inversion, proyecto.flujos);
 
-    return { vpn, tir, bc };
+    // NUEVO CÁLCULO: Valor Anual Equivalente (VAE)
+    // Formula: VAE = VPN * (A/P, i, n) = VPN * [ i(1+i)^n / ((1+i)^n - 1) ]
+    let vae = 0;
+    if (i === 0) {
+        // Si tasa es 0, el VAE es simplemente el promedio del beneficio neto total
+        vae = vpn / proyecto.vidaUtil;
+    } else {
+        const factorRecuperacion = (i * Math.pow(1 + i, proyecto.vidaUtil)) / (Math.pow(1 + i, proyecto.vidaUtil) - 1);
+        vae = vpn * factorRecuperacion;
+    }
+
+    return { vpn, vae, tir, bc };
 }
 
 /**
  * Calcula la TIR utilizando el método numérico de Newton-Raphson.
- * $x_{n+1} = x_n - f(x_n)/f'(x_n)$
  * @param {number} inv - Inversión inicial.
  * @param {Array<number>} flujos - Array de flujos netos.
- * @returns {string} TIR formateada o "N/A" si no converge.
+ * @returns {string} TIR formateada o "N/A".
  */
 function calcularTIR(inv, flujos) {
     let x0 = 0.1; // Estimación inicial (10%)
@@ -211,27 +228,25 @@ function calcularTIR(inv, flujos) {
     const TOLERANCIA = 0.00001;
 
     for (let k = 0; k < MAX_ITER; k++) {
-        let f = -inv; // Valor de la función (VPN)
-        let df = 0;   // Valor de la derivada
+        let f = -inv;
+        let df = 0;
         
         for (let t = 0; t < flujos.length; t++) {
             let base = 1 + x0;
             f += flujos[t] / Math.pow(base, t + 1);
-            // Derivada de a/(1+i)^t es -t*a/(1+i)^(t+1)
             df -= (t + 1) * flujos[t] / Math.pow(base, t + 2);
         }
         
-        if (Math.abs(df) < 1e-9) break; // Evitar división por cero
+        if (Math.abs(df) < 1e-9) break;
         
         let x1 = x0 - f / df;
         
-        // Comprobar convergencia
         if (Math.abs(x1 - x0) < TOLERANCIA) {
             return (x1 * 100).toFixed(2);
         }
         x0 = x1;
     }
-    return "N/A"; // No convergió
+    return "N/A";
 }
 
 // ==========================================
@@ -267,11 +282,15 @@ function actualizarUI() {
         const tr = document.createElement('tr');
         if(isWinner) tr.classList.add('winner-row');
 
+        // Formateo de VAE
+        const vaeClass = p.vae >= 0 ? 'text-success' : 'text-danger';
+
         tr.innerHTML = `
             <td>${p.nombre} ${isWinner ? '<i class="fas fa-crown text-warning" title="Mejor Opción"></i>' : ''}</td>
             <td>$${p.inversion.toLocaleString()}</td>
             <td>${p.vidaUtil} años</td>
             <td class="${p.vpn >= 0 ? 'text-success' : 'text-danger'} fw-bold">$${p.vpn.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="${vaeClass}">$${p.vae.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
             <td>${p.tir}%</td>
             <td>${p.bc.toFixed(2)}</td>
             <td class="no-print">
@@ -322,10 +341,8 @@ function actualizarGraficos(datos) {
     const ctxSens = document.getElementById('chartSensitivity');
     if(chartSensitivityInstance) chartSensitivityInstance.destroy();
     
-    // Generar puntos de curva para cada proyecto
     const sensDatasets = datos.map((d, idx) => {
         let pts = [];
-        // Simular tasas del 0% al 50% en pasos de 5%
         for(let r=0; r<=50; r+=5) {
             let v = -d.inversion;
             d.flujos.forEach((f, t) => v += f / Math.pow(1 + r/100, t + 1));
@@ -356,7 +373,7 @@ function actualizarGraficos(datos) {
     
     const flowDatasets = datos.map((d, i) => ({
         label: d.nombre,
-        data: [-d.inversion, ...d.flujos], // Prepend inversión negativa
+        data: [-d.inversion, ...d.flujos],
         borderColor: colors[i % colors.length],
         backgroundColor: colors[i % colors.length],
         tension: 0.1
@@ -373,10 +390,6 @@ function actualizarGraficos(datos) {
 // MÓDULO DE EXPORTACIÓN (PDF)
 // ==========================================
 
-/**
- * Genera un reporte PDF capturando el estado actual de la pantalla.
- * Utiliza html2canvas para rasterizar y jsPDF para compaginar.
- */
 async function generarPDF() {
     const { jsPDF } = window.jspdf;
     const btn = document.getElementById('btnPdf');
@@ -386,19 +399,16 @@ async function generarPDF() {
         return;
     }
 
-    // Feedback visual de carga
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generando...';
     btn.disabled = true;
 
     try {
-        // Configuración A4
         const doc = new jsPDF('p', 'mm', 'a4');
         const pageWidth = doc.internal.pageSize.getWidth(); 
         const margin = 10;
         let currentY = 20;
 
-        // Cabecera del Reporte
         doc.setFontSize(18);
         doc.text("Reporte de Evaluación de Proyectos", margin, currentY);
         currentY += 10;
@@ -406,11 +416,9 @@ async function generarPDF() {
         doc.text(`Fecha: ${new Date().toLocaleDateString()} - TMAR Global: ${document.getElementById('globalTmar').value}%`, margin, currentY);
         currentY += 10;
 
-        // Ocultar elementos UI no deseados en el PDF
         const actions = document.querySelectorAll('.no-print');
         actions.forEach(el => el.style.display = 'none');
         
-        // 1. Captura de Tabla
         const tableEl = document.getElementById('cardTable');
         const tableCanvas = await html2canvas(tableEl, { scale: 2 });
         const tableImg = tableCanvas.toDataURL('image/png');
@@ -419,10 +427,8 @@ async function generarPDF() {
         doc.addImage(tableImg, 'PNG', margin, currentY, pageWidth - 2*margin, tableHeight);
         currentY += tableHeight + 10;
         
-        // Restaurar UI
         actions.forEach(el => el.style.display = '');
 
-        // 2. Captura de Gráficos (Iterativa)
         const charts = [
             { id: 'boxChartVPN', title: 'Comparativa VPN' },
             { id: 'boxChartSens', title: 'Análisis de Sensibilidad' },
@@ -435,7 +441,6 @@ async function generarPDF() {
             const imgData = canvas.toDataURL('image/png');
             const imgHeight = (canvas.height * (pageWidth - 2*margin)) / canvas.width;
 
-            // Paginación automática si no cabe
             if (currentY + imgHeight > 280) {
                 doc.addPage();
                 currentY = 20;
@@ -462,12 +467,10 @@ async function generarPDF() {
 // PERSISTENCIA DE DATOS
 // ==========================================
 
-/** Guarda el estado actual en LocalStorage. */
 function guardarEnLocalStorage() { 
     localStorage.setItem('ecoProjectsPDF', JSON.stringify(projects)); 
 }
 
-/** Carga el estado previo desde LocalStorage si existe. */
 function cargarDeLocalStorage() {
     const data = localStorage.getItem('ecoProjectsPDF');
     if(data) {
