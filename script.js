@@ -21,10 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     loader.style.display = 'none';
                 }, 500);
             }
-        }, 2000); // 2 segundos
+        }, 2000); 
     });
 
-    // 3. Asignar eventos a botones
+    // 3. Asignar eventos
     document.getElementById('addProjectForm').addEventListener('submit', (e) => {
         e.preventDefault();
         agregarProyecto();
@@ -38,34 +38,81 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- LÓGICA DE NEGOCIO ---
 
 function agregarProyecto() {
+    // 1. Datos Comunes
     const nombre = document.getElementById('pNombre').value;
-    const inversion = parseFloat(document.getElementById('pInversion').value);
-    const n = parseInt(document.getElementById('pN').value);
-    const anualidad = parseFloat(document.getElementById('pAnualidad').value);
-    const salvamento = parseFloat(document.getElementById('pSalvamento').value || 0);
+    const inversionInput = document.getElementById('pInversion').value;
+    
+    if(!nombre || !inversionInput) {
+        alert("Por favor completa el nombre y la inversión.");
+        return;
+    }
+    const inversion = parseFloat(inversionInput);
 
     let flujos = [];
-    for(let i=0; i<n; i++) {
-        let monto = anualidad;
-        if (i === n-1) monto += salvamento;
-        flujos.push(monto);
+    let vidaUtil = 0;
+
+    // 2. Detectar Modo (Pestaña Activa)
+    const tabConstante = document.getElementById('constante-tab');
+    const esModoConstante = tabConstante.classList.contains('active');
+
+    if (esModoConstante) {
+        // --- MODO ANUALIDAD ---
+        const nInput = document.getElementById('pN').value;
+        const aInput = document.getElementById('pAnualidad').value;
+        const vsInput = document.getElementById('pSalvamento').value || 0;
+
+        if(!nInput || !aInput) {
+            alert("En modo anualidad, Vida Útil y Flujo Anual son obligatorios.");
+            return;
+        }
+
+        const n = parseInt(nInput);
+        const anualidad = parseFloat(aInput);
+        const salvamento = parseFloat(vsInput);
+
+        for(let i=0; i<n; i++) {
+            let monto = anualidad;
+            if (i === n-1) monto += salvamento; // Sumar salvamento al último año
+            flujos.push(monto);
+        }
+        vidaUtil = n;
+
+    } else {
+        // --- MODO FLUJOS VARIABLES ---
+        const manualInput = document.getElementById('pFlujosManual').value;
+        if(!manualInput) {
+            alert("Por favor ingresa los flujos separados por comas.");
+            return;
+        }
+
+        // Convertir string "100, 200, 300" a array [100, 200, 300]
+        flujos = manualInput.split(',').map(numStr => parseFloat(numStr.trim())).filter(n => !isNaN(n));
+        
+        if(flujos.length === 0) {
+            alert("No se detectaron flujos válidos.");
+            return;
+        }
+        vidaUtil = flujos.length;
     }
 
+    // 3. Crear Objeto Proyecto
     const nuevoProyecto = {
         id: Date.now(),
         nombre,
         inversion,
         flujos, 
-        vidaUtil: n
+        vidaUtil
     };
 
     projects.push(nuevoProyecto);
     guardarEnLocalStorage();
     actualizarUI();
     
-    // Limpiar campos
+    // 4. Limpiar Campos (Reset parcial)
     document.getElementById('pNombre').value = "";
     document.getElementById('pInversion').value = "";
+    // Opcional: Limpiar también los inputs de flujos
+    document.getElementById('pFlujosManual').value = "";
     document.getElementById('pNombre').focus();
 }
 
@@ -81,7 +128,6 @@ function borrarTodo() {
     }
 }
 
-// Función expuesta globalmente para el onclick del HTML generado dinámicamente
 window.eliminarProyecto = function(id) {
     projects = projects.filter(p => p.id !== id);
     guardarEnLocalStorage();
@@ -116,7 +162,6 @@ function calcularTIR(inv, flujos) {
             df -= (t + 1) * flujos[t] / Math.pow(1 + x0, t + 2);
         }
         
-        // Evitar división por cero
         if (df === 0) break;
         
         let x1 = x0 - f / df;
@@ -261,7 +306,6 @@ async function generarPDF() {
         const margin = 10;
         let currentY = 20;
 
-        // Título
         doc.setFontSize(18);
         doc.text("Reporte de Evaluación de Proyectos", margin, currentY);
         currentY += 10;
@@ -269,11 +313,9 @@ async function generarPDF() {
         doc.text(`Fecha: ${new Date().toLocaleDateString()} - TMAR Global: ${document.getElementById('globalTmar').value}%`, margin, currentY);
         currentY += 10;
 
-        // Ocultar acciones
         const actions = document.querySelectorAll('.no-print');
         actions.forEach(el => el.style.display = 'none');
         
-        // Tabla
         const tableEl = document.getElementById('cardTable');
         const tableCanvas = await html2canvas(tableEl, { scale: 2 });
         const tableImg = tableCanvas.toDataURL('image/png');
@@ -284,7 +326,6 @@ async function generarPDF() {
         
         actions.forEach(el => el.style.display = '');
 
-        // Gráficos
         const charts = [
             { id: 'boxChartVPN', title: 'Comparativa VPN' },
             { id: 'boxChartSens', title: 'Análisis de Sensibilidad' },
@@ -319,7 +360,6 @@ async function generarPDF() {
     }
 }
 
-// --- PERSISTENCIA ---
 function guardarEnLocalStorage() { localStorage.setItem('ecoProjectsPDF', JSON.stringify(projects)); }
 function cargarDeLocalStorage() {
     const data = localStorage.getItem('ecoProjectsPDF');
