@@ -4,12 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reporte de Ingeniería Económica</title>
-    
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -54,22 +51,43 @@
                             </div>
                             
                             <hr>
-                            <h6 class="text-muted mb-3">Parámetros de Flujo</h6>
+                            <h6 class="text-muted mb-2">Parámetros de Flujo</h6>
 
-                            <div class="mb-2">
-                                <label class="form-label small">Vida Útil (Años - N)</label>
-                                <input type="number" class="form-control" id="pN" placeholder="5" required>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label small">Flujo Neto Anual ($A)</label>
-                                <input type="number" class="form-control" id="pAnualidad" placeholder="3200" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small">Valor de Salvamento ($VS)</label>
-                                <input type="number" class="form-control" id="pSalvamento" placeholder="1000" value="0">
+                            <ul class="nav nav-tabs nav-fill small mb-3" id="flowTab" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="constante-tab" data-bs-toggle="tab" data-bs-target="#tab-constante" type="button" role="tab">Anualidad</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="variable-tab" data-bs-toggle="tab" data-bs-target="#tab-variable" type="button" role="tab">Variables</button>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content" id="flowTabContent">
+                                <div class="tab-pane fade show active" id="tab-constante" role="tabpanel">
+                                    <div class="mb-2">
+                                        <label class="form-label small">Vida Útil (Años - N)</label>
+                                        <input type="number" class="form-control" id="pN" placeholder="5">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">Flujo Neto Anual ($A)</label>
+                                        <input type="number" class="form-control" id="pAnualidad" placeholder="3200">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small">Valor de Salvamento ($VS)</label>
+                                        <input type="number" class="form-control" id="pSalvamento" placeholder="1000" value="0">
+                                    </div>
+                                </div>
+
+                                <div class="tab-pane fade" id="tab-variable" role="tabpanel">
+                                    <div class="mb-3">
+                                        <label class="form-label small">Flujos Netos (Año 1 en adelante)</label>
+                                        <textarea class="form-control" id="pFlujosManual" rows="4" placeholder="Ej: 2000, 3500, 4000, 5500"></textarea>
+                                        <div class="form-text" style="font-size: 0.75rem;">Separa los valores con comas. Incluye el salvamento en el último valor si aplica.</div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="d-grid">
+                            <div class="d-grid mt-3">
                                 <button type="submit" class="btn btn-success"><i class="fas fa-save me-2"></i>Agregar</button>
                             </div>
                         </form>
@@ -101,8 +119,7 @@
                                     <th class="no-print">Acción</th>
                                 </tr>
                             </thead>
-                            <tbody id="projectsTableBody">
-                                </tbody>
+                            <tbody id="projectsTableBody"></tbody>
                         </table>
                     </div>
                     <div class="card-footer bg-light" id="winnerAlert" style="display:none;">
@@ -142,10 +159,10 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
     <script src="script.js"></script>
 </body>
 </html>
