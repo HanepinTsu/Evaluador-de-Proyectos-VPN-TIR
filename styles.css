@@ -1,25 +1,25 @@
 /* Estilos Globales */
-body { 
-    background-color: #f0f2f5; 
+body {
+    background-color: #f0f2f5;
 }
 
 /* Tablas y Clases de Utilidad */
-.winner-row { 
-    background-color: #d1e7dd !important; 
-    border-left: 5px solid #198754; 
+.winner-row {
+    background-color: #d1e7dd !important;
+    border-left: 5px solid #198754;
 }
 
 /* Contenedores de Gráficos */
-.chart-box { 
-    background: white; 
-    padding: 15px; 
-    border-radius: 8px; 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+.chart-box {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     margin-bottom: 20px;
 }
 
 .chart-container-relative {
-    position: relative; 
+    position: relative;
     height: 300px;
 }
 
@@ -47,9 +47,9 @@ body {
 
 /* Animación suave para el logo */
 @keyframes pulse {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.05); opacity: 0.8; }
-    100% { transform: scale(1); opacity: 1; }
+    0%   { transform: scale(1);    opacity: 1; }
+    50%  { transform: scale(1.05); opacity: 0.8; }
+    100% { transform: scale(1);    opacity: 1; }
 }
 
 .hidden-loader {
@@ -57,5 +57,28 @@ body {
     visibility: hidden;
 }
 
+/* --- ANIMACIÓN TOAST --- */
+@keyframes slideInToast {
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* --- VALIDACIÓN VISUAL DE INPUTS --- */
+input.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
+}
+
 /* Clase auxiliar para PDF */
 .pdf-bg { background-color: white !important; }
+
+/* Estado vacío de tabla */
+#projectsTableBody td.text-muted i {
+    opacity: 0.4;
+}
