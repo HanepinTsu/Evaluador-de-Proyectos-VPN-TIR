@@ -2,8 +2,7 @@
  * @fileoverview Lógica principal para el Evaluador de Proyectos de Ingeniería Económica.
  * Maneja la entrada de datos, cálculos financieros (VPN, VAE, TIR, B/C), visualización de gráficos
  * y exportación de reportes.
- * @author HanepinTsu/PSM
- * @version 1.0.0
+ * @version 1.1.0 — Correcciones de bugs y mejoras de robustez.
  */
 
 // ==========================================
@@ -23,7 +22,7 @@ let chartSensitivityInstance = null;
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    
+
     // 1. Recuperar persistencia y renderizar estado inicial
     cargarDeLocalStorage();
     actualizarUI();
@@ -36,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 loader.classList.add('hidden-loader');
                 setTimeout(() => { loader.style.display = 'none'; }, 500);
             }
-        }, 2000); 
+        }, 2000);
     });
 
     // 3. Bindings de Eventos
@@ -48,6 +47,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btnUpdateTmar').addEventListener('click', recalcularTodo);
     document.getElementById('btnReset').addEventListener('click', borrarTodo);
     document.getElementById('btnPdf').addEventListener('click', generarPDF);
+
+    // 4. Validación en tiempo real del input TMAR
+    document.getElementById('globalTmar').addEventListener('input', function () {
+        const val = parseFloat(this.value);
+        if (isNaN(val) || val < 0 || val > 100) {
+            this.classList.add('is-invalid');
+        } else {
+            this.classList.remove('is-invalid');
+        }
+    });
 });
 
 // ==========================================
@@ -60,15 +69,24 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function agregarProyecto() {
     // 1. Captura de datos generales
-    const nombre = document.getElementById('pNombre').value;
+    const nombre = document.getElementById('pNombre').value.trim();
     const inversionInput = document.getElementById('pInversion').value;
-    
+
     // Validación básica
-    if(!nombre || !inversionInput) {
-        alert("Error: Nombre e Inversión son campos obligatorios.");
+    if (!nombre || !inversionInput) {
+        mostrarToast("error", "Nombre e Inversión son campos obligatorios.");
         return;
     }
     const inversion = parseFloat(inversionInput);
+    if (inversion <= 0) {
+        mostrarToast("error", "La inversión inicial debe ser un valor positivo.");
+        return;
+    }
+    // Verificar nombre duplicado
+    if (projects.some(p => p.nombre.toLowerCase() === nombre.toLowerCase())) {
+        mostrarToast("warning", `Ya existe un proyecto con el nombre "${nombre}".`);
+        return;
+    }
 
     let flujos = [];
     let vidaUtil = 0;
@@ -83,56 +101,65 @@ function agregarProyecto() {
         const aInput = document.getElementById('pAnualidad').value;
         const vsInput = document.getElementById('pSalvamento').value || 0;
 
-        if(!nInput || !aInput) {
-            alert("Modo Anualidad: Vida Útil y Flujo Anual son obligatorios.");
+        if (!nInput || !aInput) {
+            mostrarToast("error", "Modo Anualidad: Vida Útil y Flujo Anual son obligatorios.");
             return;
         }
 
         const n = parseInt(nInput);
+        if (n <= 0 || n > 100) {
+            mostrarToast("error", "La vida útil debe estar entre 1 y 100 años.");
+            return;
+        }
+
         const anualidad = parseFloat(aInput);
         const salvamento = parseFloat(vsInput);
 
         // Generación del vector de flujos
-        for(let i=0; i<n; i++) {
+        for (let i = 0; i < n; i++) {
             let monto = anualidad;
-            if (i === n-1) monto += salvamento; // Suma VS al último año
+            if (i === n - 1) monto += salvamento; // Suma VS al último año
             flujos.push(monto);
         }
         vidaUtil = n;
 
     } else {
-        // --- MODO FLUJOS VARIABLES (AUTOMATIZADO) ---
+        // --- MODO FLUJOS VARIABLES ---
         const manualInput = document.getElementById('pFlujosManual').value;
         const vsVarInput = document.getElementById('pSalvamentoVar').value || 0;
 
-        if(!manualInput) {
-            alert("Modo Variable: Ingrese los flujos operativos.");
+        if (!manualInput.trim()) {
+            mostrarToast("error", "Modo Variable: Ingrese los flujos operativos.");
             return;
         }
 
-        // Parsing: Convertir string CSV a array de números
-        flujos = manualInput.split(',').map(numStr => parseFloat(numStr.trim())).filter(n => !isNaN(n));
+        // FIX BUG #5: Renombrada variable de shadowing 'n' → 'numVal'
+        flujos = manualInput.split(',').map(str => parseFloat(str.trim())).filter(numVal => !isNaN(numVal));
         const salvamentoVar = parseFloat(vsVarInput);
 
-        if(flujos.length === 0) {
-            alert("Error: No se detectaron flujos numéricos válidos.");
+        if (flujos.length === 0) {
+            mostrarToast("error", "No se detectaron flujos numéricos válidos.");
             return;
         }
 
-        // AUTOMATIZACIÓN: Sumar el Salvamento al último flujo ingresado
         if (salvamentoVar !== 0) {
             flujos[flujos.length - 1] += salvamentoVar;
         }
-        
         vidaUtil = flujos.length;
+    }
+
+    // FIX BUG #4: Guardia contra vidaUtil = 0 (no debería pasar, pero por seguridad)
+    if (vidaUtil === 0) {
+        mostrarToast("error", "Error interno: vida útil resultó 0.");
+        return;
     }
 
     // 3. Construcción del Objeto Proyecto
     const nuevoProyecto = {
-        id: Date.now(), // ID único basado en timestamp
+        id: Date.now(),
         nombre,
         inversion,
-        flujos, 
+        flujos,
         vidaUtil
     };
 
@@ -140,23 +167,32 @@ function agregarProyecto() {
     projects.push(nuevoProyecto);
     guardarEnLocalStorage();
     actualizarUI();
-    
-    // 5. Limpieza de Formulario
+    mostrarToast("success", `Proyecto "${nombre}" agregado correctamente.`);
+
+    // FIX BUG #6: Limpiar TODOS los campos del formulario (incluyendo modo Anualidad)
     document.getElementById('pNombre').value = "";
     document.getElementById('pInversion').value = "";
-    document.getElementById('pFlujosManual').value = ""; // Limpiar text area
-    document.getElementById('pSalvamentoVar').value = "0"; // Reset VS variable
+    document.getElementById('pN').value = "";
+    document.getElementById('pAnualidad').value = "";
+    document.getElementById('pSalvamento').value = "0";
+    document.getElementById('pFlujosManual').value = "";
+    document.getElementById('pSalvamentoVar').value = "0";
     document.getElementById('pNombre').focus();
 }
 
 /** Recalcula métricas al cambiar la TMAR global. */
-function recalcularTodo() { 
-    actualizarUI(); 
+function recalcularTodo() {
+    const tmar = parseFloat(document.getElementById('globalTmar').value);
+    if (isNaN(tmar) || tmar < 0) {
+        mostrarToast("error", "Ingrese una TMAR válida (≥ 0).");
+        return;
+    }
+    actualizarUI();
 }
 
 /** Elimina todos los proyectos y limpia el localStorage. */
 function borrarTodo() {
-    if(confirm("ATENCIÓN: Se eliminarán todos los proyectos. ¿Desea continuar?")) {
+    if (confirm("ATENCIÓN: Se eliminarán todos los proyectos. ¿Desea continuar?")) {
         projects = [];
         localStorage.removeItem('ecoProjectsPDF');
         actualizarUI();
@@ -168,11 +204,11 @@ function borrarTodo() {
  * Expuesto globalmente (window) para ser llamado desde el HTML inyectado.
  * @param {number} id - ID único del proyecto.
  */
-window.eliminarProyecto = function(id) {
+window.eliminarProyecto = function (id) {
     projects = projects.filter(p => p.id !== id);
     guardarEnLocalStorage();
     actualizarUI();
-}
+};
 
 // ==========================================
 // MOTOR DE CÁLCULO FINANCIERO
@@ -191,22 +227,24 @@ function calcularMetricas(proyecto, tmar) {
 
     // Cálculo de VPN y VP de Ingresos (para B/C)
     proyecto.flujos.forEach((f, idx) => {
-        let factor = Math.pow(1 + i, idx + 1);
+        const factor = Math.pow(1 + i, idx + 1);
         vpn += f / factor;
-        if(f > 0) vpIngresos += f / factor;
+        if (f > 0) vpIngresos += f / factor;
     });
 
     // Relación Beneficio/Costo
-    let bc = vpIngresos / proyecto.inversion;
+    const bc = proyecto.inversion > 0 ? vpIngresos / proyecto.inversion : 0;
 
     // Tasa Interna de Retorno
-    let tir = calcularTIR(proyecto.inversion, proyecto.flujos);
+    const tir = calcularTIR(proyecto.inversion, proyecto.flujos);
 
-    // NUEVO CÁLCULO: Valor Anual Equivalente (VAE)
-    // Formula: VAE = VPN * (A/P, i, n) = VPN * [ i(1+i)^n / ((1+i)^n - 1) ]
+    // Valor Anual Equivalente (VAE)
+    // Formula: VAE = VPN * [ i(1+i)^n / ((1+i)^n - 1) ]
     let vae = 0;
-    if (i === 0) {
-        // Si tasa es 0, el VAE es simplemente el promedio del beneficio neto total
+    // FIX BUG #4: Guardia contra vidaUtil = 0
+    if (proyecto.vidaUtil <= 0) {
+        vae = 0;
+    } else if (i === 0) {
         vae = vpn / proyecto.vidaUtil;
     } else {
         const factorRecuperacion = (i * Math.pow(1 + i, proyecto.vidaUtil)) / (Math.pow(1 + i, proyecto.vidaUtil) - 1);
@@ -217,31 +255,48 @@ function calcularMetricas(proyecto, tmar) {
 }
 
 /**
- * Calcula la TIR utilizando el método numérico de Newton-Raphson.
+ * Calcula la TIR utilizando el método numérico de Newton-Raphson con
+ * validación de convergencia y guardia contra valores inválidos.
+ * FIX BUG #3: Añadida detección de divergencia (NaN, Infinity, x fuera de [-0.999, 10]).
  * @param {number} inv - Inversión inicial.
  * @param {Array<number>} flujos - Array de flujos netos.
- * @returns {string} TIR formateada o "N/A".
+ * @returns {string} TIR formateada como porcentaje o "N/A".
  */
 function calcularTIR(inv, flujos) {
     let x0 = 0.1; // Estimación inicial (10%)
     const MAX_ITER = 1000;
     const TOLERANCIA = 0.00001;
+    const X_MIN = -0.999; // Límite inferior: tasa > -100%
+    const X_MAX = 10.0;   // Límite superior: 1000% (valores mayores son economicamente irreales)
 
     for (let k = 0; k < MAX_ITER; k++) {
         let f = -inv;
         let df = 0;
-        
+
         for (let t = 0; t < flujos.length; t++) {
-            let base = 1 + x0;
+            const base = 1 + x0;
+            // Evitar base cero o negativa (singularidad matemática)
+            if (Math.abs(base) < 1e-9) return "N/A";
             f += flujos[t] / Math.pow(base, t + 1);
             df -= (t + 1) * flujos[t] / Math.pow(base, t + 2);
         }
-        
-        if (Math.abs(df) < 1e-9) break;
-        
-        let x1 = x0 - f / df;
-        
+
+        // FIX: Detectar derivada casi cero (punto de inflexión o flujo plano)
+        if (Math.abs(df) < 1e-9) return "N/A";
+
+        const x1 = x0 - f / df;
+
+        // FIX: Detectar divergencia o valores no numéricos
+        if (!isFinite(x1) || isNaN(x1)) return "N/A";
+
+        // FIX: Detectar salida de rango económicamente válido
+        if (x1 < X_MIN || x1 > X_MAX) return "N/A";
+
         if (Math.abs(x1 - x0) < TOLERANCIA) {
+            // Verificación final: confirmar que realmente es raíz
+            let verificacion = -inv;
+            flujos.forEach((f, t) => { verificacion += f / Math.pow(1 + x1, t + 1); });
+            if (Math.abs(verificacion) > 1) return "N/A"; // No convergió realmente
             return (x1 * 100).toFixed(2);
         }
         x0 = x1;
@@ -254,7 +309,7 @@ function calcularTIR(inv, flujos) {
 // ==========================================
 
 /**
- * Función maestra de renderizado. 
+ * Función maestra de renderizado.
  * Recalcula métricas, actualiza la tabla HTML y redibuja los gráficos.
  */
 function actualizarUI() {
@@ -262,7 +317,22 @@ function actualizarUI() {
     const tmar = parseFloat(tmarVal) || 0;
     const tbody = document.getElementById('projectsTableBody');
     tbody.innerHTML = '';
-    
+
+    // FIX BUG #8: Estado vacío visual cuando no hay proyectos
+    if (projects.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center text-muted py-5">
+                    <i class="fas fa-folder-open fa-2x mb-2 d-block"></i>
+                    No hay proyectos registrados. Agregue uno usando el formulario.
+                </td>
+            </tr>`;
+        document.getElementById('winnerAlert').style.display = 'none';
+        // Limpiar gráficos si no hay datos
+        actualizarGraficos([]);
+        return;
+    }
+
     let maxVPN = -Infinity;
     let winnerID = null;
 
@@ -280,21 +350,24 @@ function actualizarUI() {
     resultados.forEach(p => {
         const isWinner = p.id === winnerID && p.vpn > 0;
         const tr = document.createElement('tr');
-        if(isWinner) tr.classList.add('winner-row');
+        if (isWinner) tr.classList.add('winner-row');
 
-        // Formateo de VAE
+        // FIX BUG #2: Mostrar TIR correctamente — "N/A" sin signo "%"
+        const tirDisplay = p.tir === "N/A" ? "N/A" : `${p.tir}%`;
         const vaeClass = p.vae >= 0 ? 'text-success' : 'text-danger';
 
         tr.innerHTML = `
             <td>${p.nombre} ${isWinner ? '<i class="fas fa-crown text-warning" title="Mejor Opción"></i>' : ''}</td>
             <td>$${p.inversion.toLocaleString()}</td>
             <td>${p.vidaUtil} años</td>
-            <td class="${p.vpn >= 0 ? 'text-success' : 'text-danger'} fw-bold">$${p.vpn.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-            <td class="${vaeClass}">$${p.vae.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-            <td>${p.tir}%</td>
+            <td class="${p.vpn >= 0 ? 'text-success' : 'text-danger'} fw-bold">$${p.vpn.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            <td class="${vaeClass}">$${p.vae.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            <td>${tirDisplay}</td>
             <td>${p.bc.toFixed(2)}</td>
             <td class="no-print">
-                <button class="btn btn-outline-danger btn-sm" onclick="eliminarProyecto(${p.id})"><i class="fas fa-times"></i></button>
+                <button class="btn btn-outline-danger btn-sm" onclick="eliminarProyecto(${p.id})">
+                    <i class="fas fa-times"></i>
+                </button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -314,7 +387,7 @@ function actualizarUI() {
 }
 
 /**
- * Gestiona la creación y actualización de los gráficos Chart.js
+ * Gestiona la creación y actualización de los gráficos Chart.js.
  * @param {Array} datos - Lista de proyectos con métricas calculadas.
  */
 function actualizarGraficos(datos) {
@@ -322,8 +395,16 @@ function actualizarGraficos(datos) {
 
     // --- GRÁFICO 1: VPN (Barras) ---
     const ctxVPN = document.getElementById('chartVPN');
-    if(chartVPNInstance) chartVPNInstance.destroy();
-    
+    if (chartVPNInstance) chartVPNInstance.destroy();
+
+    // FIX BUG #7: Solo renderizar si hay datos
+    if (datos.length === 0) {
+        chartVPNInstance = null;
+        if (chartFlowsInstance) { chartFlowsInstance.destroy(); chartFlowsInstance = null; }
+        if (chartSensitivityInstance) { chartSensitivityInstance.destroy(); chartSensitivityInstance = null; }
+        return;
+    }
+
     chartVPNInstance = new Chart(ctxVPN, {
         type: 'bar',
         data: {
@@ -331,27 +412,37 @@ function actualizarGraficos(datos) {
             datasets: [{
                 label: 'Valor Presente Neto ($)',
                 data: datos.map(d => d.vpn),
-                backgroundColor: datos.map((d,i) => colors[i%colors.length])
+                backgroundColor: datos.map((d, i) => colors[i % colors.length])
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false }
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                    }
+                }
+            }
+        }
     });
 
     // --- GRÁFICO 2: Sensibilidad (Líneas Curvas) ---
     const ctxSens = document.getElementById('chartSensitivity');
-    if(chartSensitivityInstance) chartSensitivityInstance.destroy();
-    
+    if (chartSensitivityInstance) chartSensitivityInstance.destroy();
+
     const sensDatasets = datos.map((d, idx) => {
         let pts = [];
-        for(let r=0; r<=50; r+=5) {
+        for (let r = 0; r <= 50; r += 5) {
             let v = -d.inversion;
-            d.flujos.forEach((f, t) => v += f / Math.pow(1 + r/100, t + 1));
+            d.flujos.forEach((f, t) => v += f / Math.pow(1 + r / 100, t + 1));
             pts.push(v);
         }
         return {
             label: d.nombre,
             data: pts,
-            borderColor: colors[idx%colors.length],
+            borderColor: colors[idx % colors.length],
             fill: false,
             tension: 0.4
         };
@@ -359,18 +450,22 @@ function actualizarGraficos(datos) {
 
     chartSensitivityInstance = new Chart(ctxSens, {
         type: 'line',
-        data: { labels: ['0%','5%','10%','15%','20%','25%','30%','35%','40%','45%','50%'], datasets: sensDatasets },
+        data: {
+            labels: ['0%', '5%', '10%', '15%', '20%', '25%', '30%', '35%', '40%', '45%', '50%'],
+            datasets: sensDatasets
+        },
         options: { responsive: true, maintainAspectRatio: false }
     });
 
     // --- GRÁFICO 3: Flujos de Caja (Perfil Temporal) ---
     const ctxFlows = document.getElementById('chartFlows');
-    if(chartFlowsInstance) chartFlowsInstance.destroy();
-    
-    const maxN = Math.max(...datos.map(d => d.vidaUtil), 0);
-    let labelsT = [];
-    for(let i=0; i<=maxN; i++) labelsT.push('Año ' + i);
-    
+    if (chartFlowsInstance) chartFlowsInstance.destroy();
+
+    // FIX BUG #7: Guardia explícita antes de Math.max con spread vacío
+    const maxN = datos.length > 0 ? Math.max(...datos.map(d => d.vidaUtil)) : 0;
+    const labelsT = [];
+    for (let i = 0; i <= maxN; i++) labelsT.push('Año ' + i);
+
     const flowDatasets = datos.map((d, i) => ({
         label: d.nombre,
         data: [-d.inversion, ...d.flujos],
@@ -393,9 +488,9 @@ function actualizarGraficos(datos) {
 async function generarPDF() {
     const { jsPDF } = window.jspdf;
     const btn = document.getElementById('btnPdf');
-    
-    if(projects.length === 0) {
-        alert("No hay proyectos registrados para exportar.");
+
+    if (projects.length === 0) {
+        mostrarToast("warning", "No hay proyectos registrados para exportar.");
         return;
     }
 
@@ -403,9 +498,14 @@ async function generarPDF() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generando...';
     btn.disabled = true;
 
+    // FIX BUG #1: Mover el ocultamiento de .no-print FUERA del try,
+    // y la restauración al bloque finally para garantizar su ejecución.
+    const actions = document.querySelectorAll('.no-print');
+    actions.forEach(el => el.style.display = 'none');
+
     try {
         const doc = new jsPDF('p', 'mm', 'a4');
-        const pageWidth = doc.internal.pageSize.getWidth(); 
+        const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 10;
         let currentY = 20;
 
@@ -416,18 +516,13 @@ async function generarPDF() {
         doc.text(`Fecha: ${new Date().toLocaleDateString()} - TMAR Global: ${document.getElementById('globalTmar').value}%`, margin, currentY);
         currentY += 10;
 
-        const actions = document.querySelectorAll('.no-print');
-        actions.forEach(el => el.style.display = 'none');
-        
         const tableEl = document.getElementById('cardTable');
         const tableCanvas = await html2canvas(tableEl, { scale: 2 });
         const tableImg = tableCanvas.toDataURL('image/png');
-        const tableHeight = (tableCanvas.height * (pageWidth - 2*margin)) / tableCanvas.width;
-        
-        doc.addImage(tableImg, 'PNG', margin, currentY, pageWidth - 2*margin, tableHeight);
+        const tableHeight = (tableCanvas.height * (pageWidth - 2 * margin)) / tableCanvas.width;
+
+        doc.addImage(tableImg, 'PNG', margin, currentY, pageWidth - 2 * margin, tableHeight);
         currentY += tableHeight + 10;
-        
-        actions.forEach(el => el.style.display = '');
 
         const charts = [
             { id: 'boxChartVPN', title: 'Comparativa VPN' },
@@ -439,7 +534,7 @@ async function generarPDF() {
             const chartEl = document.getElementById(chart.id);
             const canvas = await html2canvas(chartEl, { scale: 2 });
             const imgData = canvas.toDataURL('image/png');
-            const imgHeight = (canvas.height * (pageWidth - 2*margin)) / canvas.width;
+            const imgHeight = (canvas.height * (pageWidth - 2 * margin)) / canvas.width;
 
             if (currentY + imgHeight > 280) {
                 doc.addPage();
@@ -448,37 +543,86 @@ async function generarPDF() {
 
             doc.setFontSize(12);
             doc.text(chart.title, margin, currentY - 2);
-            doc.addImage(imgData, 'PNG', margin, currentY, pageWidth - 2*margin, imgHeight);
+            doc.addImage(imgData, 'PNG', margin, currentY, pageWidth - 2 * margin, imgHeight);
             currentY += imgHeight + 15;
         }
 
         doc.save('Reporte_Ingenieria_Economica.pdf');
+        mostrarToast("success", "PDF generado y descargado correctamente.");
 
     } catch (error) {
         console.error("Error en generación PDF:", error);
-        alert("Hubo un error al generar el PDF. Consulte la consola para más detalles.");
+        mostrarToast("error", "Hubo un error al generar el PDF. Consulte la consola para más detalles.");
     } finally {
+        // FIX BUG #1: SIEMPRE restaurar elementos ocultos y el botón,
+        // incluso si el try lanzó una excepción.
+        actions.forEach(el => el.style.display = '');
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
 }
 
 // ==========================================
+// SISTEMA DE NOTIFICACIONES (TOAST)
+// ==========================================
+
+/**
+ * Muestra un mensaje de notificación tipo Toast no bloqueante.
+ * Reemplaza los alert() para mejor UX.
+ * @param {'success'|'error'|'warning'} tipo - Tipo de notificación.
+ * @param {string} mensaje - Mensaje a mostrar.
+ */
+function mostrarToast(tipo, mensaje) {
+    const colores = { success: '#198754', error: '#dc3545', warning: '#ffc107' };
+    const iconos = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle' };
+
+    // Asegurar que exista el contenedor
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;top:80px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        background:${colores[tipo]};color:white;padding:12px 18px;border-radius:8px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:10px;
+        font-size:0.9rem;max-width:320px;animation:slideInToast 0.3s ease;
+    `;
+    toast.innerHTML = `<i class="fas ${iconos[tipo]}"></i><span>${mensaje}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+// ==========================================
 // PERSISTENCIA DE DATOS
 // ==========================================
 
-function guardarEnLocalStorage() { 
-    localStorage.setItem('ecoProjectsPDF', JSON.stringify(projects)); 
+function guardarEnLocalStorage() {
+    try {
+        localStorage.setItem('ecoProjectsPDF', JSON.stringify(projects));
+    } catch (e) {
+        console.warn("No se pudo guardar en localStorage:", e);
+    }
 }
 
 function cargarDeLocalStorage() {
-    const data = localStorage.getItem('ecoProjectsPDF');
-    if(data) {
-        try {
+    try {
+        const data = localStorage.getItem('ecoProjectsPDF');
+        if (data) {
             projects = JSON.parse(data);
-        } catch (e) {
-            console.error("Error al leer LocalStorage:", e);
-            projects = [];
+            // Validación básica de estructura
+            if (!Array.isArray(projects)) projects = [];
         }
+    } catch (e) {
+        console.error("Error al leer LocalStorage:", e);
+        projects = [];
     }
 }
